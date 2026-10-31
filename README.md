@@ -19,6 +19,12 @@ Para **compilar atualizações de firmware**, instale e inicie um ambiente Docke
 
 No menu **⌨ TOTEM**, marque ou desmarque **Painel flutuante** para mostrar ou ocultar o teclado. A opção acompanha o estado real da janela, inclusive depois de fechar pelo ×. O mesmo menu reabre o editor. O painel permanece sobre as janelas, não recebe o foco de digitação e mostra somente o controle de fechar. O editor mantém os controles normais de janela e um campo nativo para testar texto recebido pelo macOS.
 
+## Tutorial de adaptação
+
+No menu **⌨ TOTEM → Tutorial de adaptação**, ou pelo botão **Aprender a usar o split** no editor, abra o roteiro guiado de dez etapas. Ele cobre posição das mãos, F/J, letras, alcance das fileiras, polegares, Shift, NAV, setas e Command+A.
+
+O mapa destaca a próxima tecla e os modificadores necessários. Os exercícios de texto só passam quando a sequência chega ao campo do macOS; os exercícios de posições/setas identificam explicitamente a leitura do firmware. É possível ler a próxima etapa sem praticar, sem marcá-la como concluída. O progresso é local e não contém o texto digitado. A prática guiada exige o mapa iniciante reconhecido, para evitar ensinar posições de um firmware diferente.
+
 ## Mapa inicial simples
 
 Três camadas, com letras QWERTY normais e sem funções diferentes ao tocar/segurar letras.

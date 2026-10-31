@@ -22,6 +22,7 @@ final class LiveModel: NSObject, ObservableObject, URLSessionDataDelegate, CBCen
     var central: CBCentralManager?
     var peripheral: CBPeripheral?
     var scanTimeout: DispatchWorkItem?
+    var telemetryReady = false
     let base = "http://127.0.0.1:8767"
     let stateUUID = CBUUID(string: "5fbc1001-6c8d-4f43-a01a-a6d18a88c001")
     let outputUUID = CBUUID(string: "5fbc1002-6c8d-4f43-a01a-a6d18a88c001")
@@ -32,7 +33,10 @@ final class LiveModel: NSObject, ObservableObject, URLSessionDataDelegate, CBCen
             guard let data=data, let object=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else { return }
             DispatchQueue.main.async {
                 self.token=object["token"] as? String ?? ""
-                if let values=object["runtime_layers"] as? [[String:Any]] {
+                let telemetry = object["telemetry"] as? [String:Any] ?? [:]
+                let sideData = telemetry["sides"] as? [String:[String:Any]] ?? [:]
+                let mapMatches = (object["runtime_build"] as? String) == (sideData["left"]?["build"] as? String)
+                if mapMatches, let values=object["runtime_layers"] as? [[String:Any]] {
                     self.layers=values.map { LiveLayer(label:$0["label"] as? String ?? "",bindings:$0["bindings"] as? [String] ?? []) }
                 } else { self.layers=[] }
                 if let telemetry=object["telemetry"] as? [String:Any] { self.update(telemetry) }
@@ -84,8 +88,16 @@ final class LiveModel: NSObject, ObservableObject, URLSessionDataDelegate, CBCen
         request.httpBody=try? JSONSerialization.data(withJSONObject:object)
         URLSession.shared.dataTask(with:request).resume()
     }
+    func readableBluetoothError(_ error: Error) -> String {
+        let value = error as NSError
+        if value.domain == "CBATTErrorDomain" && [5,15].contains(value.code) {
+            return "Pareamento não autenticado. Esqueça o TOTEM no macOS, limpe o perfil no teclado e emparelhe novamente."
+        }
+        return error.localizedDescription
+    }
     func status(_ message:String) { bluetoothStatus=message; send(["status":message]) }
     func connectBluetooth() {
+        telemetryReady = false
         status("Procurando TOTEM…")
         if central == nil { central=CBCentralManager(delegate:self,queue:.main) }
         else { beginScan() }
@@ -117,7 +129,7 @@ final class LiveModel: NSObject, ObservableObject, URLSessionDataDelegate, CBCen
     }
     func centralManager(_ central:CBCentralManager,didConnect peripheral:CBPeripheral) { peripheral.discoverServices(nil) }
     func centralManager(_ central:CBCentralManager,didFailToConnect peripheral:CBPeripheral,error:Error?) { status("Falha na conexão Bluetooth") }
-    func centralManager(_ central:CBCentralManager,didDisconnectPeripheral peripheral:CBPeripheral,error:Error?) { status("Bluetooth desconectado") }
+    func centralManager(_ central:CBCentralManager,didDisconnectPeripheral peripheral:CBPeripheral,error:Error?) { telemetryReady=false; status("Bluetooth desconectado") }
     func peripheral(_ peripheral:CBPeripheral,didDiscoverServices error:Error?) {
         for service in peripheral.services ?? [] { peripheral.discoverCharacteristics([stateUUID,outputUUID],for:service) }
     }
@@ -130,11 +142,11 @@ final class LiveModel: NSObject, ObservableObject, URLSessionDataDelegate, CBCen
         }
     }
     func peripheral(_ peripheral:CBPeripheral,didUpdateNotificationStateFor characteristic:CBCharacteristic,error:Error?) {
-        if let error=error { status(error.localizedDescription) } else if characteristic.isNotifying { status("Bluetooth conectado") }
+        if let error=error { status(readableBluetoothError(error)) } else if characteristic.isNotifying && !telemetryReady { status("Validando dados do TOTEM…") }
     }
     func peripheral(_ peripheral:CBPeripheral,didUpdateValueFor characteristic:CBCharacteristic,error:Error?) {
-        guard error==nil,let data=characteristic.value else { if let error=error { status(error.localizedDescription) }; return }
-        if characteristic.uuid==stateUUID { send(["packet":Array(data)]) }
+        guard error==nil,let data=characteristic.value else { if let error=error { status(readableBluetoothError(error)) }; return }
+        if characteristic.uuid==stateUUID { if !telemetryReady { telemetryReady=true; status("Bluetooth conectado") }; send(["packet":Array(data)]) }
         else if characteristic.uuid==outputUUID { send(["output":Array(data)]) }
     }
 }

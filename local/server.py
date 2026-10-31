@@ -124,7 +124,7 @@ def snapshot():
         history=ROOT/'artifacts/history'/(firmware_id+'-left.json')
         if history.exists(): runtime=json.loads(history.read_text()).get('layers')
     with LOCK:
-        return {'runtime_layers':runtime,'hash':keymap.digest(source),'layers':keymap.parse(source.decode()),'token':TOKEN,
+        return {'runtime_build':firmware_id if runtime else None,'runtime_layers':runtime,'hash':keymap.digest(source),'layers':keymap.parse(source.decode()),'token':TOKEN,
             'devices':list(INVENTORY),'bootloaders':list(BOOTS),'mappings':dict(MAPPINGS),
             'job':dict(JOB),'telemetry':MONITOR.snapshot()}
 
@@ -165,7 +165,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc: return self.reply(500,{'error':str(exc)})
         if path=='/api/job':
             with LOCK: return self.reply(200,dict(JOB))
-        names={'/':'index.html','/app.js':'app.js','/style.css':'style.css'}
+        names={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/tutorial.js':'tutorial.js','/tutorial-core.js':'tutorial-core.js'}
         if path not in names: return self.reply(404,{'error':'Não encontrado.'})
         p=ROOT/'local/static'/names[path]
         self.reply(200,p.read_bytes(),mimetypes.guess_type(str(p))[0] or 'text/plain')

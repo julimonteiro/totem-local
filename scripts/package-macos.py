@@ -33,6 +33,7 @@ def main():
     contents=app/'Contents'; binaries=contents/'MacOS'; resources=contents/'Resources'
     binaries.mkdir(parents=True); resources.mkdir()
     shutil.copy2(ROOT/'native/Info.plist',contents/'Info.plist')
+    shutil.copy2(ROOT/'native/assets/AppIcon.icns',resources/'AppIcon.icns')
     built=[]
     for arch,(python_arch,checksum) in PYTHONS.items():
         name=f'cpython-{PYTHON_VERSION}+{PYTHON_RELEASE}-{python_arch}-apple-darwin-install_only_stripped.tar.gz'

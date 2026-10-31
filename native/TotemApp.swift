@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var editor: NSWindow!
     var overlay: FloatingPanel!
     var statusItem: NSStatusItem!
+    var editorWebView: WKWebView?
+    var tutorialRequested = false
     var backend: Process?
     let base = "http://127.0.0.1:8767"
     let root: String = {
@@ -24,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do { try prepareWorkspace() } catch { fail("Não foi possível preparar os arquivos locais: \(error.localizedDescription)"); return }
         NSApp.setActivationPolicy(.regular)
+        if let resources = Bundle.main.resourceURL,
+           let icon = NSImage(contentsOf: resources.appendingPathComponent("AppIcon.icns")) { NSApp.applicationIconImage = icon }
         let menu = NSMenu()
         let appItem = NSMenuItem()
         menu.addItem(appItem)
@@ -32,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let toggle = appMenu.addItem(withTitle: "Painel flutuante", action: #selector(toggleOverlay), keyEquivalent: "1")
         toggle.target = self
         appMenu.addItem(withTitle: "Abrir editor", action: #selector(showEditor), keyEquivalent: "2")
+        let tutorial = appMenu.addItem(withTitle: "Tutorial de adaptação", action: #selector(showTutorial), keyEquivalent: "3")
+        tutorial.target = self
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Sair do TOTEM Local", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
@@ -164,6 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         input.widthAnchor.constraint(greaterThanOrEqualToConstant: 350).isActive = true
         stack.addArrangedSubview(row)
         let web = webView(path: "/")
+        editorWebView = web
         web.setContentHuggingPriority(.defaultLow, for: .vertical)
         stack.addArrangedSubview(web)
         return stack
@@ -186,6 +193,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "bluetooth" { liveModel.connectBluetooth() }
+    }
+    @objc func showTutorial() {
+        showEditor()
+        tutorialRequested = true
+        editorWebView?.evaluateJavaScript("window.TotemTutorial ? (window.TotemTutorial.open(), true) : false") { [weak self] result, _ in
+            if result as? Bool == true { self?.tutorialRequested = false }
+        }
+    }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if webView === editorWebView && tutorialRequested { showTutorial() }
     }
     @objc func showOverlay() { overlay?.orderFrontRegardless() }
     @objc func toggleOverlay() {

@@ -1,1 +1,11 @@
-{"name":"totem-local-ui-checks","private":true,"scripts":{"test:browser":"node local/browser-check.cjs && node local/browser-regression.cjs"},"devDependencies":{"playwright":"1.58.2"}}
+{
+  "name": "totem-local-ui-checks",
+  "private": true,
+  "scripts": {
+    "test:browser": "node local/browser-check.cjs && node local/browser-regression.cjs && node local/browser-tutorial.cjs",
+    "test:tutorial": "node local/test_tutorial.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.58.2"
+  }
+}

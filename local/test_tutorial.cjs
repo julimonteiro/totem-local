@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict');
+const {lessons,evaluate,hint}=require('./static/tutorial-core.js');
+assert.equal(evaluate('casa','cas').complete,false);
+assert.deepEqual(evaluate('casa','caza'),{prefix:2,complete:false,mistake:true});
+assert.equal(evaluate('casa','casa').complete,true);
+assert.equal(evaluate('casa','casa ').complete,false);
+assert.equal(new Set(lessons.map(x=>x.id)).size,lessons.length);
+const layers=[{bindings:['&kp C','&kp SPACE','&kp LSHFT','&mo 1']},{bindings:['&kp N1','&trans','&trans','&trans']}];
+assert.deepEqual(hint(layers,'C'),{layer:0,positions:[0,2]});
+assert.deepEqual(hint(layers,'1'),{layer:1,positions:[0,3]});
+assert.deepEqual(hint(layers,'?'),{layer:0,positions:[]});
+console.log('Tutorial: prefix, correction, exact completion, Shift and NAV guidance passed');
+const {supported}=require('./static/tutorial-core.js');
+const beginner='Q W E R T Y U I O P A S D F G H J K L SEMI ESC Z X C V B N M COMMA DOT SLASH BSPC LCTRL LGUI SPACE ENTER'.split(' ').map(k=>'&kp '+k).concat(['&mo 1','&kp LSHFT']);
+const navigation=Array.from({length:10},(_,i)=>'&kp N'+((i+1)%10));
+assert.equal(supported([{bindings:beginner},{bindings:navigation}]),true);
+const old=beginner.slice();old[33]='&mt_all LGUI TAB';
+assert.equal(supported([{bindings:old},{bindings:navigation}]),false);
