@@ -17,7 +17,7 @@ O aplicativo inclui Python e código para Apple Silicon e Intel. Requer macOS 13
 
 Para **compilar atualizações de firmware**, instale e inicie um ambiente Docker compatível, como Docker Desktop ou Colima com Docker CLI. O primeiro build baixa a toolchain e dependências; os próximos usam o cache local. O painel e o editor não precisam do Docker para abrir.
 
-O menu **⌨ TOTEM** reabre o editor e o painel. O painel permanece sobre as janelas, não recebe o foco de digitação e mostra somente o controle de fechar. O editor mantém os controles normais de janela e um campo nativo para testar texto recebido pelo macOS.
+No menu **⌨ TOTEM**, marque ou desmarque **Painel flutuante** para mostrar ou ocultar o teclado. A opção acompanha o estado real da janela, inclusive depois de fechar pelo ×. O mesmo menu reabre o editor. O painel permanece sobre as janelas, não recebe o foco de digitação e mostra somente o controle de fechar. O editor mantém os controles normais de janela e um campo nativo para testar texto recebido pelo macOS.
 
 ## Mapa inicial simples
 

@@ -7,7 +7,7 @@ final class FloatingPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler, NSMenuDelegate {
     var editor: NSWindow!
     var overlay: FloatingPanel!
     var statusItem: NSStatusItem!
@@ -28,7 +28,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let appItem = NSMenuItem()
         menu.addItem(appItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Mostrar painel flutuante", action: #selector(showOverlay), keyEquivalent: "1")
+        appMenu.delegate = self
+        let toggle = appMenu.addItem(withTitle: "Painel flutuante", action: #selector(toggleOverlay), keyEquivalent: "1")
+        toggle.target = self
         appMenu.addItem(withTitle: "Abrir editor", action: #selector(showEditor), keyEquivalent: "2")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Sair do TOTEM Local", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -36,7 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NSApp.mainMenu = menu
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "⌨ TOTEM"
-        statusItem.menu = appMenu.copy() as? NSMenu
+        let statusMenu = appMenu.copy() as! NSMenu
+        statusMenu.delegate = self
+        statusItem.menu = statusMenu
         waitForServer()
     }
 
@@ -184,6 +188,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         if message.name == "bluetooth" { liveModel.connectBluetooth() }
     }
     @objc func showOverlay() { overlay?.orderFrontRegardless() }
+    @objc func toggleOverlay() {
+        guard let overlay = overlay else { return }
+        if overlay.isVisible { overlay.orderOut(nil) }
+        else { overlay.orderFrontRegardless() }
+    }
+    func menuWillOpen(_ menu: NSMenu) {
+        for item in menu.items where item.action == #selector(toggleOverlay) {
+            item.state = overlay?.isVisible == true ? .on : .off
+        }
+    }
     @objc func showEditor() { editor?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationWillTerminate(_ notification: Notification) { backend?.terminate() }
@@ -192,6 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         alert.runModal(); NSApp.terminate(nil)
     }
 }
+#if !TOTEM_MENU_TEST
 @main
 struct TotemMain {
     static func main() {
@@ -201,3 +216,4 @@ struct TotemMain {
         withExtendedLifetime(delegate) { app.run() }
     }
 }
+#endif
