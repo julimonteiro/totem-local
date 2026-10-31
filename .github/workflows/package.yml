@@ -1,0 +1,40 @@
+name: Build macOS package
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python3 local/build.py left
+      - run: python3 local/build.py right
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: artifacts/
+  macos:
+    needs: firmware
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: artifacts/
+      - run: python3 scripts/package-macos.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TOTEM-Local-macOS-universal
+          path: |
+            dist/TOTEM-Local-macOS-universal.zip
+            dist/SHA256SUMS.txt

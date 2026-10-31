@@ -1,0 +1,15 @@
+.venv/
+.package-cache/
+.build-snapshots/
+dist/
+*.app/
+artifacts/
+devices.json
+server.log
+config/backups/
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+
+docs/
