@@ -250,7 +250,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
     func applyPanelState(live: Bool, layer: Int) {
         if OverlayPolicy.visible(mode: panelMode, live: live, layer: layer) {
-            hidePanel?.cancel(); hidePanel = nil; overlay?.orderFrontRegardless()
+            hidePanel?.cancel(); hidePanel = nil
+            if overlay?.isVisible != true { overlay?.orderFrontRegardless() }
         } else if panelMode == .automatic && live && overlay?.isVisible == true {
             if hidePanel == nil {
                 let work = DispatchWorkItem { [weak self] in self?.overlay?.orderOut(nil); self?.hidePanel = nil }
@@ -286,6 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
     func checkBatteries(_ data: [String:Any]) {
         let sides = data["sides"] as? [String:[String:Any]] ?? [:]
+        let previousLevels = batteryPolicy.levels
         var warnings: [String] = []
         for side in ["left", "right"] {
             let d = sides[side] ?? [:]
@@ -301,7 +303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
         let currentWarning = warnings.joined(separator: " · ")
         if liveModel.batteryNotice != currentWarning { showBatteryNotice(currentWarning) }
-        preferences.set(batteryPolicy.levels, forKey: "batteryLevels")
+        if batteryPolicy.levels != previousLevels { preferences.set(batteryPolicy.levels, forKey: "batteryLevels") }
     }
     func menuWillOpen(_ menu: NSMenu) {
         for item in menu.items {
