@@ -14,6 +14,8 @@ final class LiveModel: NSObject, ObservableObject, URLSessionDataDelegate, CBCen
     @Published var produced = "—"
     @Published var live = false
     @Published var bluetoothStatus = "Bluetooth"
+    @Published var batteryNotice = ""
+    var onUpdate: (([String:Any]) -> Void)?
     var token = ""
     var firmware = ""
     var buffer = Data()
@@ -62,6 +64,7 @@ final class LiveModel: NSObject, ObservableObject, URLSessionDataDelegate, CBCen
         DispatchQueue.main.async {
             self.live=false; self.pressed=[]; self.transport="Serviço desconectado"
             self.layers=[]; self.leftBattery="—"; self.rightBattery="—"
+            self.onUpdate?([:])
             DispatchQueue.main.asyncAfter(deadline:.now()+1) { self.buffer=Data(); self.loadState(); self.connectStream() }
         }
     }
@@ -78,6 +81,7 @@ final class LiveModel: NSObject, ObservableObject, URLSessionDataDelegate, CBCen
         transport=live ? (number(left,"endpoint")==1 ? "Bluetooth" : "USB") : "Aguardando TOTEM"
         pressed=Set((data["pressed"] as? [Int] ?? [])+(data["flashes"] as? [Int] ?? []))
         if let output=data["produced"] as? [String:Any],let label=output["label"] as? String { produced=label }
+        onUpdate?(data)
     }
     var layerName: String { activeLayer>=0 && activeLayer<layers.count ? layers[activeLayer].label : "—" }
     func binding(_ position:Int)->String? { guard activeLayer>=0,activeLayer<layers.count,position<layers[activeLayer].bindings.count else { return nil }; return layers[activeLayer].bindings[position] }
@@ -241,6 +245,7 @@ struct NativeOverlay: View {
                     Text("Saída ZMK · composição de texto pelo macOS").font(.system(size:8)).foregroundStyle(.tertiary)
                 }
             }.padding(12).background(.quaternary.opacity(0.5),in:RoundedRectangle(cornerRadius:10))
+            if !model.batteryNotice.isEmpty { Text(model.batteryNotice).font(.caption).foregroundStyle(.orange) }
         }.padding(18).background(.regularMaterial)
     }
 }

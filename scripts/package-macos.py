@@ -48,16 +48,17 @@ def main():
                 if not (target/member.name).resolve().is_relative_to(target.resolve()): raise ValueError('Unsafe archive path')
             tar.extractall(target,filter='data')
         output=CACHE/('TotemLocal-'+arch)
-        run('xcrun','swiftc','-target',arch+'-apple-macosx13.0',ROOT/'native/TotemApp.swift',ROOT/'native/NativeMonitor.swift','-o',output,'-framework','Cocoa','-framework','WebKit','-framework','SwiftUI','-framework','CoreBluetooth')
+        run('xcrun','swiftc','-target',arch+'-apple-macosx13.0',ROOT/'native/TotemApp.swift',ROOT/'native/NativeMonitor.swift',ROOT/'native/Assistance.swift','-o',output,'-framework','Cocoa','-framework','WebKit','-framework','SwiftUI','-framework','CoreBluetooth','-framework','UserNotifications')
         built.append(output)
     run('lipo','-create',*built,'-output',binaries/'TotemLocal')
     workspace=resources/'Workspace'; workspace.mkdir()
     shutil.copytree(ROOT/'config',workspace/'config',ignore=shutil.ignore_patterns('backups','*.tmp'))
     shutil.copytree(ROOT/'telemetry',workspace/'telemetry')
     local=workspace/'local'; local.mkdir()
-    for name in ('server.py','build.py','devices.py','keymap.py','telemetry.py'):
+    for name in ('server.py','build.py','devices.py','keymap.py','telemetry.py','profiles.py'):
         shutil.copy2(ROOT/'local'/name,local/name)
     shutil.copytree(ROOT/'local/static',local/'static')
+    shutil.copytree(ROOT/'local/fixtures',local/'fixtures')
     artifacts=workspace/'artifacts'; (artifacts/'history').mkdir(parents=True)
     for side in ('left','right'):
         path,metadata=build.artifact_for(side)

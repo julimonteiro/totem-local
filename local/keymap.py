@@ -125,3 +125,18 @@ def save(path, edits, expected_hash):
         tmp.write_bytes(updated)
         os.replace(tmp, path)
     return digest(updated)
+
+
+def replace(path, source, expected_hash):
+    """Replace a full keymap with the same backup/CAS semantics as single-key edits."""
+    path=Path(path); original=path.read_bytes()
+    if digest(original)!=expected_hash: raise ValueError('Arquivo alterado. Atualize a prévia antes de aplicar.')
+    if not isinstance(source,str) or len(source.encode())>200000: raise ValueError('Keymap inválido.')
+    for layer in parse(source):
+        for binding in layer['bindings']: validate(binding)
+    updated=source.encode()
+    if original!=updated:
+        backups=path.parent/'backups'; backups.mkdir(exist_ok=True)
+        (backups/(datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.keymap')).write_bytes(original)
+        tmp=path.with_suffix('.keymap.tmp'); tmp.write_bytes(updated); os.replace(tmp,path)
+    return digest(updated)

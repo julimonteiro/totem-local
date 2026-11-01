@@ -4,11 +4,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 import build, devices, keymap
+from profiles import Store
 from telemetry import Monitor, decode_packet
 ROOT=build.ROOT
 PORT=8767
 TOKEN=secrets.token_urlsafe(32)
 KEYMAP=ROOT/'config/totem.keymap'
+PROFILES=Store(ROOT)
 LOCK=threading.RLock()
 OPERATION=threading.Lock()
 MONITOR=Monitor()
@@ -163,9 +165,10 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/state':
             try: return self.reply(200,snapshot())
             except Exception as exc: return self.reply(500,{'error':str(exc)})
+        if path=='/api/profiles': return self.reply(200,{'profiles':PROFILES.list(),'backups':PROFILES.backups()})
         if path=='/api/job':
             with LOCK: return self.reply(200,dict(JOB))
-        names={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/tutorial.js':'tutorial.js','/tutorial-core.js':'tutorial-core.js'}
+        names={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/tutorial.js':'tutorial.js','/tutorial-core.js':'tutorial-core.js','/assistance-core.js':'assistance-core.js','/assistance.js':'assistance.js'}
         if path not in names: return self.reply(404,{'error':'Não encontrado.'})
         p=ROOT/'local/static'/names[path]
         self.reply(200,p.read_bytes(),mimetypes.guess_type(str(p))[0] or 'text/plain')
@@ -178,6 +181,22 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/save':
                 if not OPERATION.acquire(blocking=False): raise ValueError('Aguarde a compilação/gravação terminar.')
                 try: result={'hash':keymap.save(KEYMAP,body['edits'],body['hash'])}
+                finally: OPERATION.release()
+            elif path.startswith('/api/profile/'):
+                if not OPERATION.acquire(blocking=False): raise ValueError('Aguarde a compilação/gravação terminar.')
+                try:
+                    action=path.rsplit('/',1)[1]
+                    if action=='create': result=PROFILES.create(body.get('name'),body.get('source',KEYMAP.read_text()))
+                    elif action=='rename': PROFILES.rename(body.get('id'),body.get('name')); result={'ok':True}
+                    elif action=='delete': PROFILES.delete(body.get('id')); result={'ok':True}
+                    elif action in ('preview','apply','export'):
+                        if 'template' in body: source=PROFILES.template(body['template'])
+                        elif 'backup' in body: source=PROFILES.backup(body['backup'])
+                        elif 'source' in body: source=body['source']
+                        else: source=PROFILES.read(body.get('id'))['source']
+                        result={'source':source,'layers':PROFILES.validate(source)}
+                        if action=='apply': result['hash']=keymap.replace(KEYMAP,source,body.get('hash'))
+                    else: raise ValueError('Operação de perfil desconhecida.')
                 finally: OPERATION.release()
             elif path in ('/api/load','/api/build'):
                 start_job(path.rsplit('/',1)[1],body.get('side')); result={'started':True}

@@ -1,13 +1,14 @@
 import Cocoa
 import WebKit
 import SwiftUI
+import UserNotifications
 
 final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler, NSMenuDelegate, NSWindowDelegate {
     var editor: NSWindow!
     var overlay: FloatingPanel!
     var statusItem: NSStatusItem!
@@ -22,6 +23,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }()
     var retries = 0
     let liveModel = LiveModel()
+    var preferences = UserDefaults.standard
+    var panelMode: PanelMode { PanelMode(rawValue: preferences.string(forKey: "panelMode") ?? "automatic") ?? .automatic }
+    var hidePanel: DispatchWorkItem?
+    var batteryPolicy = BatteryPolicy()
+    var assistanceRequested: String?
+
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do { try prepareWorkspace() } catch { fail("Não foi possível preparar os arquivos locais: \(error.localizedDescription)"); return }
@@ -38,6 +45,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         appMenu.addItem(withTitle: "Abrir editor", action: #selector(showEditor), keyEquivalent: "2")
         let tutorial = appMenu.addItem(withTitle: "Tutorial de adaptação", action: #selector(showTutorial), keyEquivalent: "3")
         tutorial.target = self
+        for (title, mode) in [("Automático por camada", PanelMode.automatic), ("Sempre visível", .always), ("Oculto", .hidden)] {
+            let item = appMenu.addItem(withTitle: title, action: #selector(selectPanelMode(_:)), keyEquivalent: "")
+            item.target = self; item.representedObject = mode.rawValue
+        }
+        for (title, section) in [("Como faço…?", "search"), ("Treino adaptativo", "practice"), ("Perfis de layout", "profiles"), ("Diagnóstico", "diagnostics")] {
+            let item = appMenu.addItem(withTitle: title, action: #selector(openAssistance(_:)), keyEquivalent: "")
+            item.target = self; item.representedObject = section
+        }
+        let alerts = appMenu.addItem(withTitle: "Avisos de bateria", action: #selector(toggleBatteryAlerts), keyEquivalent: "")
+        alerts.target = self
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Sair do TOTEM Local", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
@@ -137,6 +154,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         overlay.hidesOnDeactivate = false
         overlay.isReleasedWhenClosed = false
         overlay.minSize = NSSize(width: 650, height: 335)
+        overlay.delegate = self
+        batteryPolicy.levels = preferences.dictionary(forKey: "batteryLevels") as? [String:Int] ?? [:]
+        liveModel.onUpdate = { [weak self] data in
+            guard let self = self else { return }
+            self.applyPanelState(live: self.liveModel.live, layer: self.liveModel.activeLayer)
+            self.checkBatteries(data)
+        }
         liveModel.start()
         overlay.contentView = NSHostingView(rootView: NativeOverlay(model: liveModel))
         overlay.isOpaque = false
@@ -147,7 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             overlay.setFrameOrigin(NSPoint(x: frame.maxX - 860, y: frame.minY + 30))
         }
         showEditor()
-        showOverlay()
+        applyPanelState(live: liveModel.live, layer: liveModel.activeLayer)
     }
 
     func editorContent() -> NSView {
@@ -179,6 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func webView(path: String) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "bluetooth")
+        config.userContentController.add(self, name: "exportKeymap")
         let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = self
         view.setValue(false, forKey: "drawsBackground")
@@ -193,6 +218,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "bluetooth" { liveModel.connectBluetooth() }
+        if message.name == "exportKeymap", let data = message.body as? [String:Any], let source = data["source"] as? String, source.utf8.count <= 200000 {
+            let panel = NSSavePanel(); panel.nameFieldStringValue = "totem-layout.keymap"
+            panel.beginSheetModal(for: editor) { response in
+                if response == .OK, let url = panel.url {
+                    do { try source.write(to: url, atomically: true, encoding: .utf8) }
+                    catch { let alert = NSAlert(); alert.messageText = "Não foi possível exportar"; alert.informativeText = error.localizedDescription; alert.beginSheetModal(for: self.editor) }
+                }
+            }
+        }
     }
     @objc func showTutorial() {
         showEditor()
@@ -203,16 +237,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if webView === editorWebView && tutorialRequested { showTutorial() }
+        if let section = assistanceRequested { showAssistance(section) }
     }
-    @objc func showOverlay() { overlay?.orderFrontRegardless() }
-    @objc func toggleOverlay() {
-        guard let overlay = overlay else { return }
-        if overlay.isVisible { overlay.orderOut(nil) }
-        else { overlay.orderFrontRegardless() }
+    @objc func showOverlay() { setPanelMode(.always) }
+    @objc func toggleOverlay() { setPanelMode(overlay?.isVisible == true ? .hidden : .always) }
+    @objc func selectPanelMode(_ item: NSMenuItem) {
+        if let raw = item.representedObject as? String, let mode = PanelMode(rawValue: raw) { setPanelMode(mode) }
+    }
+    func setPanelMode(_ mode: PanelMode) {
+        preferences.set(mode.rawValue, forKey: "panelMode")
+        applyPanelState(live: liveModel.live, layer: liveModel.activeLayer)
+    }
+    func applyPanelState(live: Bool, layer: Int) {
+        if OverlayPolicy.visible(mode: panelMode, live: live, layer: layer) {
+            hidePanel?.cancel(); hidePanel = nil; overlay?.orderFrontRegardless()
+        } else if panelMode == .automatic && live && overlay?.isVisible == true {
+            if hidePanel == nil {
+                let work = DispatchWorkItem { [weak self] in self?.overlay?.orderOut(nil); self?.hidePanel = nil }
+                hidePanel = work; DispatchQueue.main.asyncAfter(deadline: .now()+0.35, execute: work)
+            }
+        } else { hidePanel?.cancel(); hidePanel = nil; overlay?.orderOut(nil) }
+    }
+    func windowWillClose(_ notification: Notification) {
+        if notification.object as? NSWindow === overlay { setPanelMode(.hidden) }
+    }
+    @objc func openAssistance(_ item: NSMenuItem) { showAssistance(item.representedObject as? String ?? "search") }
+    func showAssistance(_ section: String) {
+        guard ["search", "practice", "profiles", "diagnostics"].contains(section) else { return }
+        showEditor(); assistanceRequested = section
+        editorWebView?.evaluateJavaScript("window.TotemAssistance ? (window.TotemAssistance.open('\(section)'), true) : false") { [weak self] result, _ in
+            if result as? Bool == true { self?.assistanceRequested = nil }
+        }
+    }
+    @objc func toggleBatteryAlerts() {
+        if preferences.bool(forKey: "batteryAlerts") { preferences.set(false, forKey: "batteryAlerts"); showBatteryNotice(""); return }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert,.sound]) { [weak self] granted, _ in
+            DispatchQueue.main.async {
+                self?.preferences.set(true, forKey: "batteryAlerts")
+                self?.showBatteryNotice(granted ? "Avisos de bateria ativados." : "Notificações não autorizadas. Os avisos aparecerão no app.")
+            }
+        }
+    }
+    func showBatteryNotice(_ text: String) {
+        liveModel.batteryNotice = text
+        if let encoded = try? JSONSerialization.data(withJSONObject: [text]), let json = String(data: encoded, encoding: .utf8) {
+            editorWebView?.evaluateJavaScript("document.dispatchEvent(new CustomEvent('totem:battery',{detail:\(json)[0]}))")
+        }
+    }
+    func checkBatteries(_ data: [String:Any]) {
+        let sides = data["sides"] as? [String:[String:Any]] ?? [:]
+        var warnings: [String] = []
+        for side in ["left", "right"] {
+            let d = sides[side] ?? [:]
+            let percentage = (d["battery"] as? NSNumber)?.intValue ?? -1
+            if let warning = BatteryPolicy.warning(side: side, percentage: percentage, fresh: d["fresh"] as? Bool ?? false, enabled: preferences.bool(forKey: "batteryAlerts")) { warnings.append(warning) }
+            guard preferences.bool(forKey: "batteryAlerts") else { continue }
+            if let value = batteryPolicy.observe(side: side, percentage: percentage, fresh: d["fresh"] as? Bool ?? false) {
+                let label = side == "left" ? "esquerda" : "direita"
+                let text = "Metade \(label): \(value)% de bateria."
+                let content = UNMutableNotificationContent(); content.title = "TOTEM · hora de carregar"; content.body = text; content.sound = .default
+                UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "battery-"+side, content: content, trigger: nil))
+            }
+        }
+        let currentWarning = warnings.joined(separator: " · ")
+        if liveModel.batteryNotice != currentWarning { showBatteryNotice(currentWarning) }
+        preferences.set(batteryPolicy.levels, forKey: "batteryLevels")
     }
     func menuWillOpen(_ menu: NSMenu) {
-        for item in menu.items where item.action == #selector(toggleOverlay) {
-            item.state = overlay?.isVisible == true ? .on : .off
+        for item in menu.items {
+            if item.action == #selector(toggleOverlay) { item.state = overlay?.isVisible == true ? .on : .off }
+            if item.action == #selector(selectPanelMode(_:)) { item.state = (item.representedObject as? String) == panelMode.rawValue ? .on : .off }
+            if item.action == #selector(toggleBatteryAlerts) { item.state = preferences.bool(forKey: "batteryAlerts") ? .on : .off }
         }
     }
     @objc func showEditor() { editor?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }

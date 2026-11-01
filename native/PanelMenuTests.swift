@@ -3,9 +3,27 @@ import Cocoa
 @main
 struct PanelMenuTests {
     static func main() {
+        precondition(OverlayPolicy.visible(mode: .automatic, live: true, layer: 1))
+        precondition(!OverlayPolicy.visible(mode: .automatic, live: true, layer: 0))
+        precondition(!OverlayPolicy.visible(mode: .automatic, live: false, layer: 2))
+        var battery = BatteryPolicy()
+        precondition(battery.observe(side: "left", percentage: 5, fresh: false) == nil)
+        precondition(battery.observe(side: "left", percentage: 20, fresh: true) == 20)
+        precondition(battery.observe(side: "left", percentage: 18, fresh: true) == nil)
+        precondition(battery.observe(side: "left", percentage: 10, fresh: true) == 10)
+        precondition(battery.observe(side: "right", percentage: 10, fresh: true) == 10)
+        precondition(battery.observe(side: "left", percentage: 30, fresh: true) == nil)
+        precondition(battery.observe(side: "left", percentage: 20, fresh: true) == 20)
+        precondition(BatteryPolicy.warning(side: "left", percentage: 10, fresh: true, enabled: true) != nil)
+        precondition(BatteryPolicy.warning(side: "left", percentage: 10, fresh: false, enabled: true) == nil)
+        precondition(BatteryPolicy.warning(side: "left", percentage: 90, fresh: true, enabled: true) == nil)
+        precondition(BatteryPolicy.warning(side: "left", percentage: 10, fresh: true, enabled: false) == nil)
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         let delegate = AppDelegate()
+        delegate.preferences = UserDefaults(suiteName: "local.totem.tests")!
+        delegate.preferences.removePersistentDomain(forName: "local.totem.tests")
+        delegate.setPanelMode(.hidden)
         delegate.overlay = FloatingPanel(contentRect: NSRect(x: -10000, y: -10000, width: 1, height: 1), styleMask: [.nonactivatingPanel], backing: .buffered, defer: false)
         delegate.overlay.isReleasedWhenClosed = false
         let menu = NSMenu()
@@ -29,6 +47,18 @@ struct PanelMenuTests {
         precondition(copy.items[0].state == .off)
         delegate.toggleOverlay()
         precondition(delegate.overlay.isVisible)
+        delegate.setPanelMode(.automatic)
+        delegate.applyPanelState(live: true, layer: 1)
+        precondition(delegate.overlay.isVisible)
+        delegate.applyPanelState(live: true, layer: 0)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.45))
+        precondition(!delegate.overlay.isVisible)
+        delegate.applyPanelState(live: true, layer: 2)
+        precondition(delegate.overlay.isVisible)
+        delegate.windowWillClose(Notification(name: NSWindow.willCloseNotification, object: delegate.overlay!))
+        precondition(delegate.panelMode == .hidden)
+        delegate.applyPanelState(live: true, layer: 1)
+        precondition(!delegate.overlay.isVisible)
         delegate.overlay.orderOut(nil)
         print("Panel menu: show, hide, close/reopen and focus checks passed")
     }

@@ -17,4 +17,6 @@ jobs:
       - run: node --check local/static/app.js
       - run: node --check local/static/tutorial.js
       - run: node local/test_tutorial.cjs
+      - run: node local/test_assistance.cjs
+      - run: node --check local/static/assistance.js
       - run: python3 -m py_compile local/*.py scripts/*.py
