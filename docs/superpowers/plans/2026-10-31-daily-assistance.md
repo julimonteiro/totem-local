@@ -52,5 +52,5 @@ Interfaces: OverlayPolicy(mode,live,layer), BatteryPolicy.observe(side,percentag
 ### Task 5: Review and release
 Files: README.md, native/Info.plist, checks workflow and packaging scripts.
 - [x] Run Python, JS, browser and native checks; independent whole-change review; resolve material findings.
-- [ ] Package universal app and verify signature; open updated developer app.
-- [ ] Commit and publish public source and prerelease ZIP under existing authorization; report actual validation limits.
+- [x] Package universal app and verify signature; open updated developer app.
+- [x] Commit and publish public source and prerelease ZIP under existing authorization; report actual validation limits.
